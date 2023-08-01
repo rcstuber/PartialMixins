@@ -26,9 +26,6 @@ namespace PartialMixins
             this.semanticModel = semanticModel;
         }
 
-
-
-
         public override SyntaxNode VisitGenericName(GenericNameSyntax node)
         {
             if (node.Parent is not QualifiedNameSyntax)

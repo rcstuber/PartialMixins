@@ -84,8 +84,8 @@ namespace Mixin
 
             typesToExtend = typesToExtend.OrderTopological(elementThatDependsOnOther =>
             {
-                IEnumerable<AttributeData> toImplenmt = elementThatDependsOnOther.GetAttributes().Where(x => x.AttributeClass.Equals(mixinAttribute, SymbolEqualityComparer.Default));
-                INamedTypeSymbol[] implementationSymbol = toImplenmt
+                IEnumerable<AttributeData> toImplement = elementThatDependsOnOther.GetAttributes().Where(x => x.AttributeClass.Equals(mixinAttribute, SymbolEqualityComparer.Default));
+                INamedTypeSymbol[] implementationSymbol = toImplement
                 .Select(currentMixinAttribute => (currentMixinAttribute.ConstructorArguments.First().Value as INamedTypeSymbol).ConstructedFrom)
                 .Where(x => typesToExtend.Contains(x, SymbolEqualityComparer.Default)).ToArray();
                 return implementationSymbol;
@@ -98,9 +98,10 @@ namespace Mixin
 
             foreach (INamedTypeSymbol originalType in typesToExtend)
             {
-                IEnumerable<AttributeData> toImplenmt = originalType.GetAttributes().Where(x => x.AttributeClass.Equals(mixinAttribute, SymbolEqualityComparer.Default));
+                IEnumerable<AttributeData> toImplement = originalType.GetAttributes().Where(x => x.AttributeClass.Equals(mixinAttribute, SymbolEqualityComparer.Default));
                 List<TypeDeclarationSyntax> typeExtensions = new List<TypeDeclarationSyntax>();
-                foreach (AttributeData currentMixinAttribute in toImplenmt)
+                
+                foreach (AttributeData currentMixinAttribute in toImplement)
                 {
                     INamedTypeSymbol implementationSymbol = (currentMixinAttribute.ConstructorArguments.First().Value as INamedTypeSymbol);
                     INamedTypeSymbol updatetedImplementationSymbol = compilation.GetTypeByMetadataName(GetFullQualifiedName(implementationSymbol));
@@ -122,8 +123,7 @@ namespace Mixin
                         TypeParameterImplementer typeParameterImplementer = new TypeParameterImplementer(semanticModel, typeParameterMapping, originalType, implementationSymbol);
                         changedImplementaionSyntaxNode = (TypeDeclarationSyntax)typeParameterImplementer.Visit(changedImplementaionSyntaxNode);
 
-
-                        MethodAttributor AttributeGenerator = new MethodAttributor(changedImplementaionSyntaxNode);
+                        MethodAttributor AttributeGenerator = new MethodAttributor(changedImplementaionSyntaxNode, originalType);
                         changedImplementaionSyntaxNode = (TypeDeclarationSyntax)AttributeGenerator.Visit(changedImplementaionSyntaxNode);
 
                         TypeDeclarationSyntax newClass = (originalType.IsReferenceType ?
@@ -206,9 +206,8 @@ namespace Mixin
                 //    lines += "\n#error " + line ?? string.Empty;
                 //}
                 //while (line != null);
-
                 //txt = SourceText.From(lines, System.Text.Encoding.UTF8);
-
+                File.WriteAllText($"/Users/rstuber/Documents/Projekte/WorldCup/libs/PartialMixins/Tests/{originalType.Name}_mixins.debug", txt.ToString());
 
                 context.AddSource($"{originalType.Name}_mixins.cs", txt);
             }

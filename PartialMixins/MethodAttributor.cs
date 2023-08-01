@@ -10,12 +10,17 @@ namespace PartialMixins
 {
     class MethodAttributor : CSharpSyntaxRewriter
     {
+
         private const string GENERATOR_ATTRIBUTE_NAME = "global::System.CodeDom.Compiler.GeneratedCodeAttribute";
         private readonly AttributeListSyntax[] generatedAttribute;
         private readonly CSharpSyntaxNode currentDeclaration;
 
-        public MethodAttributor(CSharpSyntaxNode currentDeclaration)
+        private INamedTypeSymbol originalType;
+
+        public MethodAttributor(CSharpSyntaxNode currentDeclaration, INamedTypeSymbol originalType)
         {
+            this.originalType = originalType;
+
             this.generatedAttribute = new AttributeListSyntax[] { SyntaxFactory.AttributeList(
                             SyntaxFactory.SeparatedList(new AttributeSyntax[] {
                             SyntaxFactory.Attribute(SyntaxFactory.ParseName( GENERATOR_ATTRIBUTE_NAME),
@@ -29,10 +34,39 @@ namespace PartialMixins
             this.currentDeclaration = currentDeclaration;
         }
 
+        private IEnumerable<CSharpSyntaxNode> GetSyntaxNodesForType(INamedTypeSymbol type)
+        {
+            return type.DeclaringSyntaxReferences.Select(x => x.GetSyntax()).Cast<TypeDeclarationSyntax>();
+        }
+
+        private bool NodeExists(SyntaxNode node)
+        {
+            var type = originalType;
+            while(type != null) {
+                foreach(var impl in GetSyntaxNodesForType(type)) {
+                    if(null == impl)
+                        continue;
+                    foreach(var declared in impl.ChildNodes()) {
+                        /*if(node is MethodDeclarationSyntax method)
+                            node = method.WithModifiers(method.Modifiers.Remove(
+                                method.Modifiers.First(x => x.Kind() == SyntaxKind.OverrideKeyword || x.Kind() == SyntaxKind.VirtualKeyword))
+                            );*/
+                        if(declared.IsEquivalentTo(node, true))
+                            return true;
+                    }
+                }
+                type = type.BaseType;
+            }
+            return false;
+        }
 
         public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
-
+            if(NodeExists(node)) {
+                var newIdent = SyntaxFactory.Identifier(node.Identifier + "_Mixin");
+                var baseMethod = node.WithIdentifier(newIdent);
+                return base.VisitMethodDeclaration(baseMethod);
+            }
             if (node.Modifiers.Any(x => x.Kind() == SyntaxKind.AbstractKeyword))
                 node = node.WithModifiers(node.Modifiers.Remove(node.Modifiers.First(x => x.Kind() == SyntaxKind.AbstractKeyword)).Add(SyntaxFactory.Token(SyntaxKind.PartialKeyword)));
 
@@ -71,6 +105,8 @@ namespace PartialMixins
         }
         public override SyntaxNode VisitFieldDeclaration(FieldDeclarationSyntax node)
         {
+            if(NodeExists(node))
+                return null;
             if (!node.AttributeLists.Any(x => x.Attributes.Any(y => y.Name.ToFullString() == GENERATOR_ATTRIBUTE_NAME)))
                 return node.AddAttributeLists(this.generatedAttribute);
             return base.VisitFieldDeclaration(node);
@@ -126,6 +162,15 @@ namespace PartialMixins
             return base.VisitEventFieldDeclaration(node);
         }
 
+        public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+        {
+            if(NodeExists(node))
+                return null;
+            if (!node.AttributeLists.Any(x => x.Attributes.Any(y => y.Name.ToFullString() == GENERATOR_ATTRIBUTE_NAME)))
+                return node.AddAttributeLists(this.generatedAttribute);
+            return base.VisitPropertyDeclaration(node);
+        }
+
         public override SyntaxNode VisitEventDeclaration(EventDeclarationSyntax node)
         {
             if (!node.AttributeLists.Any(x => x.Attributes.Any(y => y.Name.ToFullString() == GENERATOR_ATTRIBUTE_NAME)))
@@ -138,16 +183,6 @@ namespace PartialMixins
             if (!node.AttributeLists.Any(x => x.Attributes.Any(y => y.Name.ToFullString() == GENERATOR_ATTRIBUTE_NAME)))
                 return node.AddAttributeLists(this.generatedAttribute);
             return base.VisitIndexerDeclaration(node);
-        }
-
-
-
-
-        public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
-        {
-            if (!node.AttributeLists.Any(x => x.Attributes.Any(y => y.Name.ToFullString() == GENERATOR_ATTRIBUTE_NAME)))
-                return node.AddAttributeLists(this.generatedAttribute);
-            return base.VisitPropertyDeclaration(node);
         }
     }
 
